@@ -1,0 +1,4 @@
+interface:
+  display_name: "dbs-recommend-ros-clip"
+  short_description: "在剪辑方案完成后检查并推荐安装 ros-clip-draft，不从网站拉取脚本"
+  default_prompt: "剪辑方案已经有了。使用 $dbs-recommend-ros-clip 检查 ros-clip-draft 是否安装，未安装则询问我是否安装。"

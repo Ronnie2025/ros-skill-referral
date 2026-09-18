@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Skill 互推统计｜dbskill.site</title>
+    <style>
+      :root {
+        --ink: #10233f;
+        --blue: #165dff;
+        --paper: #f6f7f2;
+        --white: #fff;
+        --line: #cbd3dc;
+        --muted: #617087;
+        --lime: #c9ff45;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; color: var(--ink); background: var(--paper); font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif; }
+      a { color: var(--blue); }
+      header { display: flex; justify-content: space-between; align-items: center; min-height: 72px; padding: 0 32px; background: var(--white); border-bottom: 1px solid var(--ink); }
+      .brand { font-size: 22px; font-weight: 900; letter-spacing: -1px; text-decoration: none; color: inherit; }
+      .brand span { color: var(--blue); }
+      main { padding: 48px 32px 80px; max-width: 1080px; margin: 0 auto; }
+      h1 { font-size: clamp(32px, 5vw, 48px); letter-spacing: -.04em; margin: 0 0 12px; }
+      .lead { color: var(--muted); line-height: 1.7; max-width: 640px; }
+      .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 36px 0 28px; }
+      .card { background: var(--white); border: 2px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); padding: 22px; }
+      .card span { display: block; font: 800 11px Consolas, monospace; letter-spacing: .12em; color: var(--blue); margin-bottom: 10px; }
+      .card strong { font-size: 40px; letter-spacing: -.04em; }
+      table { width: 100%; border-collapse: collapse; background: var(--white); border: 1px solid var(--ink); }
+      th, td { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
+      th { background: var(--ink); color: #d5deea; font: 800 10px Consolas, monospace; letter-spacing: .1em; }
+      .note { margin-top: 22px; padding: 16px 18px; border-left: 4px solid var(--blue); background: #eef3ff; color: #53647a; font-size: 13px; line-height: 1.7; }
+      .error { color: #b42318; }
+      @media (max-width: 800px) {
+        .cards { grid-template-columns: 1fr; }
+        header, main { padding-left: 18px; padding-right: 18px; }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">dbs<span>/</span> referral</a>
+      <a href="/">返回首页</a>
+    </header>
+    <main>
+      <h1>Skill 互推安装量</h1>
+      <p class="lead" id="note">正在读取去重后的安装环境数。</p>
+      <div class="cards">
+        <article class="card"><span>INSTALL ENVIRONMENTS</span><strong id="installs">—</strong></article>
+        <article class="card"><span>FIRST USE</span><strong id="first-use">—</strong></article>
+        <article class="card"><span>RAW EVENTS</span><strong id="events">—</strong></article>
+      </div>
+      <table>
+        <thead>
+          <tr><th>推荐来源</th><th>来源 Skill</th><th>目标 Skill</th><th>活动</th><th>去重环境</th></tr>
+        </thead>
+        <tbody id="rows">
+          <tr><td colspan="5">加载中</td></tr>
+        </tbody>
+      </table>
+      <p class="note" id="updated"></p>
+    </main>
+    <script>
+      const statsUrl = new URL("stats.json", window.location.href).toString();
+      fetch(statsUrl, { cache: "no-store" })
+        .then((res) => {
+          if (!res.ok) throw new Error("stats " + res.status);
+          return res.json();
+        })
+        .then((data) => {
+          document.getElementById("note").textContent = data.note || "";
+          document.getElementById("installs").textContent = data.totals.install_environments;
+          document.getElementById("first-use").textContent = data.totals.first_use_environments;
+          document.getElementById("events").textContent = data.totals.events;
+          const rows = data.by_referrer || [];
+          const body = document.getElementById("rows");
+          if (!rows.length) {
+            body.innerHTML = "<tr><td colspan='5'>还没有成功上报的安装</td></tr>";
+          } else {
+            body.innerHTML = rows.map((row) =>
+              `<tr><td>${row.referrer}</td><td>${row.source_skill}</td><td>${row.target_skill}</td><td>${row.campaign || "—"}</td><td>${row.environments}</td></tr>`
+            ).join("");
+          }
+          document.getElementById("updated").textContent = "口径：去重安装环境数。更新时间 " + data.updated_at;
+        })
+        .catch((error) => {
+          document.getElementById("note").className = "lead error";
+          document.getElementById("note").textContent = "统计接口还没起来。先在阿里云安装 referral 服务，再刷新本页。";
+          document.getElementById("rows").innerHTML = `<tr><td colspan="5">${error.message}</td></tr>`;
+        });
+    </script>
+  </body>
+</html>

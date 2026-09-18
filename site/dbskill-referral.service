@@ -1,0 +1,23 @@
+[Unit]
+Description=dbskill skill-referral collector
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/lib/dbskill-referral
+Environment=REFERRAL_ROOT=/var/lib/dbskill-referral
+Environment=REFERRAL_DB=/var/lib/dbskill-referral/events.db
+Environment=REFERRAL_SALT_FILE=/var/lib/dbskill-referral/salt
+Environment=REFERRAL_PUBLIC=/usr/local/libexec/dbskill-referral/public
+Environment=REFERRAL_HOST=127.0.0.1
+Environment=REFERRAL_PORT=8788
+ExecStart=/usr/bin/python3 /usr/local/libexec/dbskill-referral/referral_api.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

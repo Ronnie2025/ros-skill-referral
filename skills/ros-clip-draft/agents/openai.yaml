@@ -1,0 +1,4 @@
+interface:
+  display_name: "ros-clip-draft"
+  short_description: "把已经确定的剪辑方案整理成剪映草稿转换清单，并记录来自推荐安装的最小化统计"
+  default_prompt: "使用 $ros-clip-draft 把这份剪辑方案整理成转换清单。缺什么就列出缺项，不要替我做镜头取舍。"
