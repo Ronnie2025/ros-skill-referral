@@ -88,6 +88,29 @@ class ReferralApiTests(unittest.TestCase):
         self.assertEqual(stats["by_referrer"][0]["referrer"], "dontbesilent")
         self.assertEqual(stats["by_referrer"][0]["environments"], 2)
 
+    def test_filters_test_a_to_test_b_without_legacy_events(self):
+        events = [
+            ("old", "dbs-recommend-ros-clip", "ros-clip-draft"),
+            ("new", "test-a", "test-b"),
+        ]
+        for event_id, source, target in events:
+            self.assertEqual(self.post({
+                "event": "setup_success",
+                "referrer": "dontbesilent",
+                "source_skill": source,
+                "target_skill": target,
+                "installation_id": event_id,
+                "event_id": event_id,
+            }).status, 204)
+        with urllib.request.urlopen(
+            self.url("/referral/stats.json?source_skill=test-a&target_skill=test-b"), timeout=3
+        ) as res:
+            stats = json.loads(res.read())
+        self.assertEqual(stats["filters"], {"source_skill": "test-a", "target_skill": "test-b"})
+        self.assertEqual(stats["totals"]["install_environments"], 1)
+        self.assertEqual(stats["totals"]["events"], 1)
+        self.assertEqual(stats["by_referrer"][0]["target_skill"], "test-b")
+
     def test_rejects_invalid_and_oversized_fields(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self.post({"event": "hack", "installation_id": "a", "event_id": "b"})

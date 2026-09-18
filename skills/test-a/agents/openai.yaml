@@ -1,0 +1,4 @@
+interface:
+  display_name: "test-A"
+  short_description: "在剪辑方案完成后检查并推荐安装 test-B，不从网站拉取脚本"
+  default_prompt: "剪辑方案已经有了。使用 $test-a 检查 test-b 是否安装，未安装则询问我是否安装。"

@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 ROOT = Path(os.environ.get("REFERRAL_ROOT", Path(__file__).resolve().parent))
 DB_PATH = Path(os.environ.get("REFERRAL_DB", ROOT / "events.db"))
@@ -154,26 +154,38 @@ def insert_event(payload: dict[str, str], ip_hash: str) -> None:
         CONN.commit()
 
 
-def stats_payload() -> dict:
+def stats_payload(target_skill: str = "", source_skill: str = "") -> dict:
+    clauses = []
+    params = []
+    if target_skill:
+        clauses.append("target_skill = ?")
+        params.append(target_skill)
+    if source_skill:
+        clauses.append("source_skill = ?")
+        params.append(source_skill)
+    filters = "".join(f" AND {clause}" for clause in clauses)
     with _db_lock:
-        total_events = CONN.execute("SELECT COUNT(*) FROM events").fetchone()[0]
+        total_events = CONN.execute(
+            f"SELECT COUNT(*) FROM events WHERE 1=1{filters}", params
+        ).fetchone()[0]
         rows = CONN.execute(
-            """
+            f"""
             SELECT installation_id, target_skill, event, referrer, source_skill, campaign, ts
             FROM events
-            WHERE event IN ('install_success', 'setup_success')
+            WHERE event IN ('install_success', 'setup_success'){filters}
             ORDER BY ts ASC
-            """
+            """, params
         ).fetchall()
         first_use = CONN.execute(
-            """
+            f"""
             SELECT COUNT(*) FROM (
-              SELECT installation_id, target_skill FROM events WHERE event = 'first_use_success'
+              SELECT installation_id, target_skill FROM events
+              WHERE event = 'first_use_success'{filters}
               INTERSECT
               SELECT installation_id, target_skill FROM events
-              WHERE event IN ('install_success', 'setup_success')
+              WHERE event IN ('install_success', 'setup_success'){filters}
             )
-            """
+            """, params + params
         ).fetchone()[0]
     first: dict[tuple[str, str], tuple] = {}
     for row in rows:
@@ -196,6 +208,7 @@ def stats_payload() -> dict:
     ]
     return {
         "metric": "deduped_install_environments",
+        "filters": {"target_skill": target_skill, "source_skill": source_skill},
         "note": "收到的安装成功上报，经安装环境标识去重。一人多台电脑或清除本地标识会算多次；无法据此推算独立人数。数据由客户端自行上报，可能漏报或被伪造。",
         "updated_at": utc_now(),
         "totals": {
@@ -250,12 +263,21 @@ class Handler(BaseHTTPRequestHandler):
         self.do_GET()
 
     def do_GET(self) -> None:
-        path = urlparse(self.path).path.rstrip("/") or "/"
+        parsed = urlparse(self.path)
+        path = parsed.path.rstrip("/") or "/"
         if path in {"/health", "/referral/health"}:
             self._send(200, b'{"ok":true}\n', "application/json; charset=utf-8")
             return
         if path in {"/stats.json", "/referral/stats.json"}:
-            body = json.dumps(stats_payload(), ensure_ascii=False, indent=2).encode("utf-8")
+            query = parse_qs(parsed.query, keep_blank_values=True)
+            selected = {}
+            for key in ("target_skill", "source_skill"):
+                values = query.get(key, [])
+                if len(values) > 1 or (values and not clean_token(values[0])):
+                    self._send(400, b'{"error":"invalid filter"}\n', "application/json; charset=utf-8")
+                    return
+                selected[key] = clean_token(values[0]) if values else ""
+            body = json.dumps(stats_payload(**selected), ensure_ascii=False, indent=2).encode("utf-8")
             self._send(200, body + b"\n", "application/json; charset=utf-8")
             return
         if path in {"/", "/referral", "/referral/index.html", "/index.html"}:

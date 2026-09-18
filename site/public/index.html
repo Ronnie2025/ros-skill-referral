@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex">
-    <title>Skill 互推统计｜dbskill.site</title>
+    <title>test-A → test-B 互推统计｜dbskill.site</title>
     <style>
       :root {
         --ink: #10233f;
@@ -45,7 +45,7 @@
       <a href="/">返回首页</a>
     </header>
     <main>
-      <h1>Skill 互推安装上报</h1>
+      <h1>test-A → test-B</h1>
       <p class="lead" id="note">正在读取去重后的安装环境数。</p>
       <div class="cards">
         <article class="card"><span>INSTALL ENVIRONMENTS</span><strong id="installs">—</strong></article>
@@ -63,7 +63,10 @@
       <p class="note" id="updated"></p>
     </main>
     <script>
-      const statsUrl = new URL("stats.json", window.location.href).toString();
+      const statsUrl = new URL("stats.json", window.location.href);
+      statsUrl.searchParams.set("source_skill", "test-a");
+      statsUrl.searchParams.set("target_skill", "test-b");
+      const displaySkill = (value) => ({ "test-a": "test-A", "test-b": "test-B" })[value] || value;
       fetch(statsUrl, { cache: "no-store" })
         .then((res) => {
           if (!res.ok) throw new Error("stats " + res.status);
@@ -80,7 +83,7 @@
             body.innerHTML = "<tr><td colspan='5'>还没有成功上报的安装</td></tr>";
           } else {
             body.innerHTML = rows.map((row) =>
-              `<tr><td>${row.referrer}</td><td>${row.source_skill}</td><td>${row.target_skill}</td><td>${row.campaign || "—"}</td><td>${row.environments}</td></tr>`
+              `<tr><td>${row.referrer}</td><td>${displaySkill(row.source_skill)}</td><td>${displaySkill(row.target_skill)}</td><td>${row.campaign || "—"}</td><td>${row.environments}</td></tr>`
             ).join("");
           }
           document.getElementById("updated").textContent = "口径：去重安装环境数。更新时间 " + data.updated_at;
