@@ -52,7 +52,15 @@ systemctl enable dbskill-referral
 systemctl restart dbskill-referral
 systemctl reload nginx
 
-curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8788/referral/health >/dev/null
+healthy=0
+for attempt in 1 2 3 4 5; do
+  if curl --fail --silent --max-time 2 http://127.0.0.1:8788/referral/health >/dev/null; then
+    healthy=1
+    break
+  fi
+  sleep 1
+done
+[[ "$healthy" -eq 1 ]] || { echo "referral api failed its local health check" >&2; false; }
 trap - ERR
 echo "referral api is up on 127.0.0.1:8788"
 echo "public page: https://dbskill.site/referral/"
