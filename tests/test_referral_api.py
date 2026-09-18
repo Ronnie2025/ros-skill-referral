@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import json
+import importlib.util
 import os
 import subprocess
 import sys
@@ -9,6 +10,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -106,10 +108,33 @@ class ReferralApiTests(unittest.TestCase):
             self.url("/referral/stats.json?source_skill=test-a&target_skill=test-b"), timeout=3
         ) as res:
             stats = json.loads(res.read())
-        self.assertEqual(stats["filters"], {"source_skill": "test-a", "target_skill": "test-b"})
+        self.assertEqual(stats["filters"], { "source_skill": "test-a", "target_skill": "test-b", "referrer": "", "campaign": ""})
         self.assertEqual(stats["totals"]["install_environments"], 1)
         self.assertEqual(stats["totals"]["events"], 1)
         self.assertEqual(stats["by_referrer"][0]["target_skill"], "test-b")
+
+    def test_http_referrer_campaign_filters_and_required_target(self):
+        self.assertEqual(self.post({
+            "event": "setup_success", "installation_id": "env-new", "event_id": "evt-new",
+            "source_skill": "outline", "target_skill": "slides", "referrer": "creator",
+            "campaign": "demo",
+        }).status, 204)
+        with urllib.request.urlopen(self.url(
+            "/referral/stats.json?referrer=creator&campaign=demo&source_skill=outline&target_skill=slides"
+        ), timeout=3) as res:
+            stats = json.loads(res.read())
+        self.assertEqual(stats["totals"]["install_environments"], 1)
+        self.assertEqual(stats["filters"]["referrer"], "creator")
+        self.assertEqual(stats["filters"]["campaign"], "demo")
+        with self.assertRaises(urllib.error.HTTPError) as ctx:
+            self.post({"event": "setup_success", "installation_id": "env", "event_id": "evt"})
+        self.assertEqual(ctx.exception.code, 400)
+        ctx.exception.close()
+        for query in ["referrer=../bad", "campaign=one&campaign=two"]:
+            with self.subTest(query=query), self.assertRaises(urllib.error.HTTPError) as ctx:
+                urllib.request.urlopen(self.url("/referral/stats.json?" + query), timeout=3)
+            self.assertEqual(ctx.exception.code, 400)
+            ctx.exception.close()
 
     def test_rejects_invalid_and_oversized_fields(self):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
@@ -177,6 +202,91 @@ class ReferralApiTests(unittest.TestCase):
         with urllib.request.urlopen(self.url("/referral/stats.json"), timeout=3) as res:
             stats = json.loads(res.read())
         self.assertEqual(stats["totals"]["install_environments"], 1)
+
+
+class ReferralStatsTests(unittest.TestCase):
+    """Exercise attribution without opening a network port."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.env = patch.dict(os.environ, {
+            "REFERRAL_DB": str(Path(self.tmp.name) / "events.db"),
+        })
+        self.env.start()
+        spec = importlib.util.spec_from_file_location("referral_stats_test", ROOT / "site" / "referral_api.py")
+        self.api = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.api)
+        self.serial = 0
+
+    def tearDown(self):
+        self.api.CONN.close()
+        self.env.stop()
+        self.tmp.cleanup()
+
+    def event(self, installation="env-1", target="editor", source="writer",
+              referrer="alice", campaign="launch", event="setup_success", ts=None):
+        self.serial += 1
+        payload = self.api.parse_event(json.dumps({
+            "event_id": f"evt-{self.serial}", "installation_id": installation,
+            "target_skill": target, "source_skill": source, "referrer": referrer,
+            "campaign": campaign, "event": event,
+        }).encode())
+        with patch.object(self.api, "utc_now", return_value=ts or "2026-09-18T00:00:00Z"):
+            self.api.insert_event(payload, "")
+
+    def test_any_source_target_and_combined_filters(self):
+        self.event()
+        self.event(target="publisher", source="editor", referrer="bob", campaign="autumn")
+        self.event(installation="env-2", referrer="bob")
+        all_stats = self.api.stats_payload()
+        self.assertEqual(all_stats["totals"]["install_environments"], 3)
+        for field, value, expected in [
+            ("target_skill", "editor", 2), ("source_skill", "editor", 1),
+            ("referrer", "bob", 2), ("campaign", "autumn", 1),
+        ]:
+            self.assertEqual(self.api.stats_payload(**{field: value})["totals"]["install_environments"], expected)
+        filtered = self.api.stats_payload(referrer="bob", target_skill="editor", campaign="launch")
+        self.assertEqual(filtered["totals"]["install_environments"], 1)
+        self.assertEqual(filtered["options"], all_stats["options"])
+        self.assertEqual(filtered["options"]["target_skill"], ["editor", "publisher"])
+        self.assertEqual(self.api.stats_payload(referrer="unknown")["totals"]["install_environments"], 0)
+
+    def test_first_attribution_survives_later_source_and_campaign(self):
+        self.event()  # Same timestamps deliberately test receipt-order tie breaking.
+        self.event(source="other", referrer="bob", campaign="second")
+        self.event(source="other", referrer="bob", campaign="second",
+                   event="first_use_success", ts="2026-09-18T01:00:00Z")
+        original = self.api.stats_payload(source_skill="writer", referrer="alice", campaign="launch")
+        self.assertEqual(original["totals"], {"install_environments": 1, "first_use_environments": 1, "events": 1})
+        self.assertEqual(original["by_referrer"][0]["first_use_environments"], 1)
+        self.assertEqual(original["by_referrer"][0]["last_seen"], "2026-09-18T01:00:00Z")
+        later = self.api.stats_payload(source_skill="other")
+        self.assertEqual(later["totals"], {"install_environments": 0, "first_use_environments": 0, "events": 2})
+        self.assertEqual(later["by_referrer"], [])
+        self.assertEqual(later["options"]["referrer"], ["alice", "bob"])
+
+    def test_first_use_requires_install_and_same_target(self):
+        self.event(event="install_attempt")
+        self.event(event="first_use_success")
+        self.event(target="publisher")
+        self.assertEqual(self.api.stats_payload()["totals"]["first_use_environments"], 0)
+        self.event()
+        self.event(event="first_use_success")
+        self.assertEqual(self.api.stats_payload()["totals"]["first_use_environments"], 1)
+
+    def test_options_include_attempts_exclude_empty_values(self):
+        self.event(source="", campaign="", referrer="", event="install_attempt")
+        self.assertEqual(self.api.stats_payload()["options"], {
+            "target_skill": ["editor"], "source_skill": [], "referrer": [], "campaign": [],
+        })
+
+    def test_target_is_required_and_valid(self):
+        for target in [None, "", " ", "../bad", "x" * 81]:
+            with self.subTest(target=target), self.assertRaises(ValueError):
+                self.api.parse_event(json.dumps({
+                    "event": "setup_success", "installation_id": "env", "event_id": "evt",
+                    "target_skill": target,
+                }).encode())
 
 
 if __name__ == "__main__":

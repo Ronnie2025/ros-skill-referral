@@ -120,13 +120,15 @@ def parse_event(raw: bytes) -> dict[str, str]:
         "event": event,
         "referrer": clean_token(data.get("referrer")),
         "source_skill": clean_token(data.get("source_skill")),
-        "target_skill": clean_token(data.get("target_skill")) or "ros-clip-draft",
+        "target_skill": clean_token(data.get("target_skill")),
         "campaign": clean_token(data.get("campaign")),
         "installation_id": clean_token(data.get("installation_id")),
         "event_id": clean_token(data.get("event_id")),
     }
     if not payload["installation_id"] or not payload["event_id"]:
         raise ValueError("installation_id and event_id required")
+    if not payload["target_skill"]:
+        raise ValueError("target_skill required")
     return payload
 
 
@@ -154,67 +156,66 @@ def insert_event(payload: dict[str, str], ip_hash: str) -> None:
         CONN.commit()
 
 
-def stats_payload(target_skill: str = "", source_skill: str = "") -> dict:
-    clauses = []
-    params = []
-    if target_skill:
-        clauses.append("target_skill = ?")
-        params.append(target_skill)
-    if source_skill:
-        clauses.append("source_skill = ?")
-        params.append(source_skill)
-    filters = "".join(f" AND {clause}" for clause in clauses)
+def stats_payload(target_skill: str = "", source_skill: str = "",
+                  referrer: str = "", campaign: str = "") -> dict:
+    selected = {"target_skill": target_skill, "source_skill": source_skill,
+                "referrer": referrer, "campaign": campaign}
     with _db_lock:
-        total_events = CONN.execute(
-            f"SELECT COUNT(*) FROM events WHERE 1=1{filters}", params
-        ).fetchone()[0]
+        # Attribute globally before applying filters. rowid breaks second-resolution
+        # timestamp ties in receipt order, preserving the first successful referral.
         rows = CONN.execute(
-            f"""
+            """
             SELECT installation_id, target_skill, event, referrer, source_skill, campaign, ts
-            FROM events
-            WHERE event IN ('install_success', 'setup_success'){filters}
-            ORDER BY ts ASC
-            """, params
+            FROM events ORDER BY ts ASC, rowid ASC
+            """
         ).fetchall()
-        first_use = CONN.execute(
-            f"""
-            SELECT COUNT(*) FROM (
-              SELECT installation_id, target_skill FROM events
-              WHERE event = 'first_use_success'{filters}
-              INTERSECT
-              SELECT installation_id, target_skill FROM events
-              WHERE event IN ('install_success', 'setup_success'){filters}
-            )
-            """, params + params
-        ).fetchone()[0]
+    fields = {"target_skill": 1, "referrer": 3, "source_skill": 4, "campaign": 5}
+
+    def matches(row: tuple) -> bool:
+        return all(not value or row[fields[field]] == value
+                   for field, value in selected.items())
+
     first: dict[tuple[str, str], tuple] = {}
+    used: set[tuple[str, str]] = set()
+    last_seen: dict[tuple[str, str], str] = {}
     for row in rows:
         key = (row[0], row[1])
-        if key not in first:
-            first[key] = row
-    by_key: dict[tuple[str, str, str, str], int] = {}
-    for row in first.values():
-        key = (row[3] or "(none)", row[4] or "(none)", row[1], row[5] or "")
-        by_key[key] = by_key.get(key, 0) + 1
-    breakdown = [
-        {
-            "referrer": key[0],
-            "source_skill": key[1],
-            "target_skill": key[2],
-            "campaign": key[3],
-            "environments": count,
-        }
-        for key, count in sorted(by_key.items(), key=lambda item: (-item[1], item[0]))
-    ]
+        last_seen[key] = row[6]
+        if row[2] in SUCCESS_EVENTS:
+            first.setdefault(key, row)
+        elif row[2] == "first_use_success":
+            used.add(key)
+    installs = {key: row for key, row in first.items() if matches(row)}
+    by_key: dict[tuple[str, str, str, str], dict] = {}
+    for installation, row in installs.items():
+        # Group raw values to avoid merging a missing source with a named source.
+        key = (row[3], row[4], row[1], row[5])
+        entry = by_key.setdefault(key, {
+            "referrer": row[3] or "(none)",
+            "source_skill": row[4] or "(none)",
+            "target_skill": row[1],
+            "campaign": row[5],
+            "environments": 0,
+            "first_use_environments": 0,
+            "last_seen": "",
+        })
+        entry["environments"] += 1
+        entry["first_use_environments"] += int(installation in used)
+        entry["last_seen"] = max(entry["last_seen"], last_seen[installation])
+    breakdown = [entry for key, entry in sorted(
+        by_key.items(), key=lambda item: (-item[1]["environments"], item[0])
+    )]
     return {
         "metric": "deduped_install_environments",
-        "filters": {"target_skill": target_skill, "source_skill": source_skill},
-        "note": "收到的安装成功上报，经安装环境标识去重。一人多台电脑或清除本地标识会算多次；无法据此推算独立人数。数据由客户端自行上报，可能漏报或被伪造。",
+        "filters": selected,
+        "options": {field: sorted({row[index] for row in rows if row[index]})
+                    for field, index in fields.items()},
+        "note": "收到的安装成功上报，按安装环境标识和目标 Skill 去重，并归于首次成功上报的推荐来源。一人多台电脑或清除本地标识会算多次；无法据此推算独立人数。数据由客户端自行上报，可能漏报或被伪造。",
         "updated_at": utc_now(),
         "totals": {
-            "install_environments": len(first),
-            "first_use_environments": first_use,
-            "events": total_events,
+            "install_environments": len(installs),
+            "first_use_environments": len(installs.keys() & used),
+            "events": sum(matches(row) for row in rows),
         },
         "by_referrer": breakdown,
     }
@@ -271,7 +272,7 @@ class Handler(BaseHTTPRequestHandler):
         if path in {"/stats.json", "/referral/stats.json"}:
             query = parse_qs(parsed.query, keep_blank_values=True)
             selected = {}
-            for key in ("target_skill", "source_skill"):
+            for key in ("target_skill", "source_skill", "referrer", "campaign"):
                 values = query.get(key, [])
                 if len(values) > 1 or (values and not clean_token(values[0])):
                     self._send(400, b'{"error":"invalid filter"}\n', "application/json; charset=utf-8")

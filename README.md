@@ -1,10 +1,12 @@
-# Skill 互推 MVP
+# Skill 互推记录
+
+[dbskill.site/referral](https://dbskill.site/referral/) 是通用互推面板，默认显示全部推荐来源与目标 Skill。可以按推荐人 / 渠道、来源 Skill、目标 Skill、活动筛选；每条推荐关系展示去重安装环境数、首次使用数与最近上报时间。新接入的 Skill 无需修改网页。
 
 test-A 根据主题写出完整口播稿，交付后询问是否需要继续做剪辑方案。用户需要时，A 推荐 test-B；同意安装后自动交接当前稿件，由 B 产出分段剪辑方案。这组实验的安装成功上报显示在 [dbskill.site/referral](https://dbskill.site/referral/)。
 
 网站只收数据，不发脚本。Agent 不会被要求执行 `curl 网站 | bash`。
 
-## 两个 Skill
+## 示例：两个测试 Skill
 
 | Skill | 角色 | 安装 |
 | --- | --- | --- |
@@ -17,15 +19,33 @@ Skill 格式要求小写安装标识，因此安装命令和调用名使用 `tes
 
 ## 统计口径
 
-面板仅显示来源 Skill 为 `test-a`、目标 Skill 为 `test-b` 的数据。数字是 **已上报的去重安装环境数**：同一安装环境首次 `setup_success` 记一次。重复安装、网络重试、拒绝统计、断网上报失败均不计入。客户端上报可被伪造，这项试验数据不能用于分成或核算独立人数。
+数字是 **已上报的去重安装环境数**：按 `(installation_id, target_skill)` 去重，由全局首次成功安装上报确定推荐来源，再应用筛选。后续重复安装、换来源上报或网络重试不会重新归因。原始事件数按事件本身的字段筛选，与安装归因口径分开。缺失来源显示为“未记录”，不推断推荐人。客户端上报可被伪造，这项试验数据不能用于分成或核算独立人数。
 
 关闭统计：`export ROS_NO_TELEMETRY=1`。拒绝后仍可安装。
 
 `setup_success` 记录安装核验后的成功上报；`first_use_success` 记录 B 首次完成剪辑方案。上报失败不阻断方案交付。安装和统计已授权时自动继续交接，无需再次粘贴稿件。
 
-## 阿里云（你需要做的）
+## 接入其他 Skill
 
-`dbskill.site` 现在是纯静态 Nginx。统计接口要单独起一个本机 Python 服务。SSH 到 ECS 后：
+在用户同意后，由 Skill 自己的安装或启用脚本向 `https://dbskill.site/referral/e` POST JSON。提供以下字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `referrer` | 推荐人或渠道标识，例如 `creator-name` |
+| `source_skill` | 推荐方 Skill 标识，例如 `writer-helper` |
+| `target_skill` | 被推荐方标识，例如 `clip-planner`，必填 |
+| `campaign` | 活动标识，例如 `autumn-pilot` |
+| `installation_id` | 安装环境内持久保存的随机标识，必填 |
+| `event_id` | 事件唯一标识；同一事件重试时复用，必填 |
+| `event` | `install_attempt`、`install_success`、`setup_success` 或 `first_use_success` |
+
+标识使用 1–80 位英文字母、数字、点、下划线或连字符。推荐人、来源 Skill、活动可以缺省，完整填写才便于归因；目标 Skill 缺失或非法时返回 400。仅成功安装事件进入安装关系明细，单独的尝试事件只计入原始事件。已存在的历史记录保留。
+
+`GET /referral/stats.json` 默认返回全部汇总；可选查询参数为 `referrer`、`source_skill`、`target_skill`、`campaign`。返回的 `options` 来自全部记录，筛选后仍可切换其他来源。
+
+## 阿里云部署与更新
+
+统计接口由独立 Python 服务处理，Nginx 将 `/referral/` 转发到本机服务。首次部署或更新时，在 ECS 中执行：
 
 ```bash
 ssh aliyun

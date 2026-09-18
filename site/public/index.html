@@ -1,98 +1,257 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="robots" content="noindex">
-    <title>test-A → test-B 互推统计｜dbskill.site</title>
-    <style>
-      :root {
-        --ink: #10233f;
-        --blue: #165dff;
-        --paper: #f6f7f2;
-        --white: #fff;
-        --line: #cbd3dc;
-        --muted: #617087;
-        --lime: #c9ff45;
-      }
-      * { box-sizing: border-box; }
-      body { margin: 0; color: var(--ink); background: var(--paper); font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif; }
-      a { color: var(--blue); }
-      header { display: flex; justify-content: space-between; align-items: center; min-height: 72px; padding: 0 32px; background: var(--white); border-bottom: 1px solid var(--ink); }
-      .brand { font-size: 22px; font-weight: 900; letter-spacing: -1px; text-decoration: none; color: inherit; }
-      .brand span { color: var(--blue); }
-      main { padding: 48px 32px 80px; max-width: 1080px; margin: 0 auto; }
-      h1 { font-size: clamp(32px, 5vw, 48px); letter-spacing: -.04em; margin: 0 0 12px; }
-      .lead { color: var(--muted); line-height: 1.7; max-width: 640px; }
-      .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin: 36px 0 28px; }
-      .card { background: var(--white); border: 2px solid var(--ink); box-shadow: 6px 6px 0 var(--ink); padding: 22px; }
-      .card span { display: block; font: 800 11px Consolas, monospace; letter-spacing: .12em; color: var(--blue); margin-bottom: 10px; }
-      .card strong { font-size: 40px; letter-spacing: -.04em; }
-      table { width: 100%; border-collapse: collapse; background: var(--white); border: 1px solid var(--ink); }
-      th, td { text-align: left; padding: 14px 16px; border-bottom: 1px solid var(--line); font-size: 14px; }
-      th { background: var(--ink); color: #d5deea; font: 800 10px Consolas, monospace; letter-spacing: .1em; }
-      .note { margin-top: 22px; padding: 16px 18px; border-left: 4px solid var(--blue); background: #eef3ff; color: #53647a; font-size: 13px; line-height: 1.7; }
-      .error { color: #b42318; }
-      @media (max-width: 800px) {
-        .cards { grid-template-columns: 1fr; }
-        header, main { padding-left: 18px; padding-right: 18px; }
-      }
-    </style>
-  </head>
-  <body>
-    <header>
-      <a class="brand" href="/">dbs<span>/</span> referral</a>
-      <a href="/">返回首页</a>
-    </header>
-    <main>
-      <h1>test-A → test-B</h1>
-      <p class="lead" id="note">正在读取去重后的安装环境数。</p>
-      <div class="cards">
-        <article class="card"><span>INSTALL ENVIRONMENTS</span><strong id="installs">—</strong></article>
-        <article class="card"><span>FIRST USE</span><strong id="first-use">—</strong></article>
-        <article class="card"><span>RAW EVENTS</span><strong id="events">—</strong></article>
-      </div>
-      <table>
-        <thead>
-          <tr><th>推荐来源</th><th>来源 Skill</th><th>目标 Skill</th><th>活动</th><th>去重环境</th></tr>
-        </thead>
-        <tbody id="rows">
-          <tr><td colspan="5">加载中</td></tr>
-        </tbody>
-      </table>
-      <p class="note" id="updated"></p>
-    </main>
-    <script>
-      const statsUrl = new URL("stats.json", window.location.href);
-      statsUrl.searchParams.set("source_skill", "test-a");
-      statsUrl.searchParams.set("target_skill", "test-b");
-      const displaySkill = (value) => ({ "test-a": "test-A", "test-b": "test-B" })[value] || value;
-      fetch(statsUrl, { cache: "no-store" })
-        .then((res) => {
-          if (!res.ok) throw new Error("stats " + res.status);
-          return res.json();
-        })
-        .then((data) => {
-          document.getElementById("note").textContent = data.note || "";
-          document.getElementById("installs").textContent = data.totals.install_environments;
-          document.getElementById("first-use").textContent = data.totals.first_use_environments;
-          document.getElementById("events").textContent = data.totals.events;
-          const rows = data.by_referrer || [];
-          const body = document.getElementById("rows");
-          if (!rows.length) {
-            body.innerHTML = "<tr><td colspan='5'>还没有成功上报的安装</td></tr>";
-          } else {
-            body.innerHTML = rows.map((row) =>
-              `<tr><td>${row.referrer}</td><td>${displaySkill(row.source_skill)}</td><td>${displaySkill(row.target_skill)}</td><td>${row.campaign || "—"}</td><td>${row.environments}</td></tr>`
-            ).join("");
-          }
-          document.getElementById("updated").textContent = "口径：去重安装环境数。更新时间 " + data.updated_at;
-        })
-        .catch((error) => {
-          document.getElementById("note").className = "lead error";
-          document.getElementById("note").textContent = "统计接口还没起来。先在阿里云安装 referral 服务，再刷新本页。";
-          document.getElementById("rows").innerHTML = `<tr><td colspan="5">${error.message}</td></tr>`;
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="color-scheme" content="light">
+  <title>Skill 互推记录｜dbskill.site</title>
+  <style>
+    :root { --ink:#10233f; --blue:#165dff; --paper:#f6f7f2; --white:#fff; --line:#dce2e8; --muted:#64748b; --light:#eef3ff; --green:#287353; }
+    * { box-sizing:border-box; }
+    body { margin:0; color:var(--ink); background:var(--paper); font-family:-apple-system,"SF Pro Text","PingFang SC","Noto Sans SC",sans-serif; font-size:14px; line-height:1.6; }
+    button,select { font:inherit; }
+    a { color:var(--blue); text-decoration:none; }
+    a:hover { text-decoration:underline; }
+    button { cursor:pointer; }
+    button:disabled { cursor:wait; opacity:.6; }
+    :focus-visible { outline:3px solid #8aafff; outline-offset:3px; }
+    header { min-height:64px; background:var(--white); border-bottom:1px solid var(--line); }
+    .nav { max-width:1240px; margin:auto; padding:16px 24px; display:flex; justify-content:space-between; align-items:center; gap:16px; }
+    .brand { color:var(--ink); font-weight:800; font-size:22px; letter-spacing:-1px; display:flex; align-items:baseline; gap:8px; }
+    .brand b { color:var(--blue); }
+    .brand small { color:var(--muted); font-weight:500; font-size:12px; letter-spacing:0; }
+    .home-link { font-size:13px; }
+    main { max-width:1240px; margin:auto; padding:38px 24px 54px; }
+    .hero { display:flex; justify-content:space-between; gap:24px; align-items:flex-end; margin-bottom:26px; }
+    .eyebrow { color:var(--blue); font-size:11px; font-weight:700; letter-spacing:.15em; margin:0 0 8px; }
+    h1 { margin:0; font-size:34px; line-height:1.25; font-weight:750; letter-spacing:-.035em; }
+    .lead { color:var(--muted); margin:12px 0 0; line-height:1.75; }
+    .tools { display:flex; align-items:center; gap:12px; flex-shrink:0; }
+    .status { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:12px; }
+    .dot { width:6px; height:6px; background:var(--muted); border-radius:50%; }
+    .status[data-state="ready"] .dot { background:var(--green); }
+    .status[data-state="error"] .dot { background:#bd452b; }
+    .button { min-height:40px; border:1px solid var(--line); border-radius:6px; padding:8px 16px; background:var(--white); color:var(--ink); font-weight:600; }
+    .button:hover { border-color:var(--blue); color:var(--blue); }
+    .stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:24px; }
+    .metric { background:var(--white); border:1px solid var(--line); border-radius:8px; padding:20px 24px; min-width:0; }
+    .metric:first-child { border-top:3px solid var(--blue); padding-top:18px; }
+    .metric-label { margin:0; color:var(--muted); font-size:13px; font-weight:500; }
+    .metric strong { font-size:38px; line-height:1.4; display:block; letter-spacing:-.04em; font-variant-numeric:tabular-nums; }
+    .metric small { display:block; color:var(--muted); font-size:12px; }
+    .panel { background:var(--white); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+    .panel-top { padding:22px 24px 18px; display:flex; align-items:center; justify-content:space-between; gap:16px; }
+    h2 { font-size:17px; margin:0; line-height:1.5; }
+    .panel-title { display:flex; align-items:center; gap:10px; }
+    .badge { color:var(--blue); background:var(--light); border-radius:4px; padding:2px 8px; font-size:12px; font-variant-numeric:tabular-nums; }
+    .scope { color:var(--muted); font-size:12px; }
+    .filters { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)) auto; align-items:end; gap:12px; padding:0 24px 22px; }
+    label { display:flex; flex-direction:column; gap:7px; color:var(--muted); font-size:12px; min-width:0; }
+    select { display:block; width:100%; min-width:0; min-height:42px; background:var(--white); color:var(--ink); border:1px solid var(--line); border-radius:5px; padding:8px 28px 8px 10px; text-overflow:ellipsis; }
+    select:hover { border-color:#aab8ce; }
+    .reset { padding:8px 10px; font-weight:400; font-size:13px; min-height:42px; }
+    table { width:100%; table-layout:fixed; border-collapse:collapse; text-align:left; }
+    th { background:#f5f7fa; color:var(--muted); font-size:11px; font-weight:600; padding:12px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+    td { padding:18px 12px; vertical-align:top; border-bottom:1px solid #ecf0f4; font-size:13px; overflow-wrap:anywhere; }
+    th:first-child,td:first-child { padding-left:24px; }
+    th:last-child,td:last-child { padding-right:24px; }
+    th:nth-child(1) { width:14%; } th:nth-child(2),th:nth-child(3) { width:18%; }
+    th:nth-child(4) { width:15%; } th:nth-child(5),th:nth-child(6) { width:9%; } th:nth-child(7) { width:17%; }
+    tbody tr:last-child td { border-bottom:0; }
+    tbody tr:hover { background:#fbfcfe; }
+    .person { font-weight:650; }
+    .skill { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:12px; }
+    .target { color:var(--blue); }
+    .subtle { color:var(--muted); }
+    .number { font-weight:650; font-variant-numeric:tabular-nums; text-align:right; }
+    .time { color:var(--muted); font-size:12px; }
+    .empty td { padding:52px 24px 56px; text-align:center; }
+    .empty-title { display:block; font-size:16px; font-weight:600; margin-bottom:7px; }
+    .empty-description { color:var(--muted); font-size:13px; }
+    .footer-bar { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; border-top:1px solid var(--line); padding:14px 24px; color:var(--muted); font-size:12px; }
+    .error { margin:0 0 20px; padding:12px 16px; border:1px solid #edc1b8; background:#fff5f2; border-radius:6px; color:#933b29; font-size:13px; }
+    [hidden] { display:none !important; }
+    .notes { margin-top:20px; color:var(--muted); font-size:12px; }
+    summary { cursor:pointer; width:fit-content; color:var(--ink); padding:8px 0; }
+    .notes p { margin:6px 0; max-width:850px; line-height:1.8; }
+    .page-footer { color:#8993a4; margin-top:26px; font-size:11px; }
+    @media (max-width:950px) {
+      .hero { align-items:flex-start; }
+      .tools { flex-direction:column-reverse; align-items:flex-end; gap:8px; }
+      .filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+      .reset { grid-column:1/-1; justify-self:end; min-height:36px; }
+      table,tbody { display:block; }
+      thead { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); }
+      tbody { padding:0 20px 20px; }
+      tbody tr { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); border:1px solid var(--line); border-radius:6px; margin-top:12px; padding:16px; gap:11px 16px; }
+      tbody tr:hover { background:transparent; }
+      td,th:first-child,td:first-child,th:last-child,td:last-child { padding:0; border:0; }
+      td { display:flex; flex-direction:column; gap:4px; min-width:0; }
+      td::before { content:attr(data-label); color:var(--muted); font-weight:400; font-size:11px; font-family:-apple-system,"PingFang SC",sans-serif; }
+      td:nth-child(1),td:nth-child(4),td:nth-child(7) { grid-column:1/-1; }
+      td:nth-child(1) { padding-bottom:10px; border-bottom:1px solid #edf0f4; }
+      td.number { text-align:left; font-size:20px; }
+      .empty { display:block; padding:32px 16px; margin-top:0; border:1px dashed var(--line); }
+      .empty td { display:block; padding:0; }
+      .empty td::before { display:none; }
+    }
+    @media (max-width:560px) {
+      .nav { padding:15px 18px; }
+      .brand { font-size:20px; } .brand small { display:none; }
+      main { padding:26px 16px 32px; }
+      h1 { font-size:28px; }
+      .hero { flex-direction:column; gap:16px; margin-bottom:20px; }
+      .lead { font-size:13px; margin-top:9px; }
+      .tools { width:100%; flex-direction:row; justify-content:space-between; align-items:center; }
+      .button { min-height:44px; }
+      .stats { gap:8px; margin-bottom:20px; }
+      .metric { padding:14px 11px; border-radius:6px; }
+      .metric:first-child { padding-top:12px; }
+      .metric strong { font-size:30px; }
+      .metric-label { font-size:12px; min-height:38px; }
+      .metric small { display:none; }
+      .panel-top { padding:18px 16px 16px; align-items:flex-start; }
+      .scope { font-size:11px; }
+      .filters { padding:0 16px 16px; gap:10px; }
+      select { min-height:44px; }
+      tbody { padding:0 16px 16px; }
+      .footer-bar { padding:14px 16px; gap:6px; }
+    }
+  </style>
+</head>
+<body>
+  <header><nav class="nav" aria-label="主导航"><a class="brand" href="/">dbs<b>/</b> referral <small>Skill 互推记录</small></a><a class="home-link" href="/">返回首页 ↗</a></nav></header>
+  <main>
+    <section class="hero" aria-labelledby="page-title">
+      <div><p class="eyebrow">SKILL REFERRALS</p><h1 id="page-title">Skill 互推记录</h1><p class="lead">汇总各个 Skill 的互推记录，查看谁推荐了什么，以及后续安装与使用。</p></div>
+      <div class="tools"><span class="status" id="status" data-state="loading" role="status"><i class="dot" aria-hidden="true"></i><span id="status-text">读取中</span></span><button class="button" id="refresh" type="button">刷新数据</button></div>
+    </section>
+    <p class="error" id="error" role="alert" hidden></p>
+    <section class="stats" aria-label="当前筛选范围的汇总">
+      <article class="metric"><h2 class="metric-label">成功安装环境</h2><strong id="installs">—</strong><small>按安装标识与目标 Skill 去重</small></article>
+      <article class="metric"><h2 class="metric-label">已首次使用</h2><strong id="first-use">—</strong><small>安装后已完成首次任务的环境</small></article>
+      <article class="metric"><h2 class="metric-label">推荐关系</h2><strong id="relations">—</strong><small>按推荐人、来源、目标与活动分组</small></article>
+    </section>
+    <section class="panel" aria-labelledby="records-title" id="records" aria-busy="true">
+      <div class="panel-top"><div class="panel-title"><h2 id="records-title">推荐来源明细</h2><span class="badge" id="row-count">—</span></div><span class="scope" id="scope">全部记录</span></div>
+      <form class="filters" id="filters">
+        <label for="referrer">推荐人 / 渠道<select id="referrer" name="referrer"><option value="">全部推荐来源</option></select></label>
+        <label for="source_skill">来源 Skill<select id="source_skill" name="source_skill"><option value="">全部来源 Skill</option></select></label>
+        <label for="target_skill">目标 Skill<select id="target_skill" name="target_skill"><option value="">全部目标 Skill</option></select></label>
+        <label for="campaign">活动<select id="campaign" name="campaign"><option value="">全部活动</option></select></label>
+        <button class="button reset" id="reset" type="reset">清除筛选</button>
+      </form>
+      <table aria-label="推荐关系与安装结果"><thead><tr><th scope="col">推荐人 / 渠道</th><th scope="col">来源 Skill</th><th scope="col">目标 Skill</th><th scope="col">活动</th><th scope="col" class="number">安装环境</th><th scope="col" class="number">首次使用</th><th scope="col">最近上报</th></tr></thead><tbody id="rows"><tr class="empty"><td colspan="7"><span class="empty-title">正在读取记录</span><span class="empty-description">加载汇总数据与推荐来源。</span></td></tr></tbody></table>
+      <div class="footer-bar"><span id="event-count">原始事件 — 条</span><span id="updated">尚未更新</span></div>
+    </section>
+    <details class="notes"><summary>这些数字如何计算？</summary><p>安装环境按随机安装标识与目标 Skill 去重，推荐归因采用首次成功安装上报。后续重复上报不增加安装数。首次使用表示该安装环境已上报完成一次任务。</p><p>缺失的推荐人、来源 Skill 或活动显示为“未记录”。同一个人在多台电脑使用或清除本地标识可能计为多个环境，无法直接换算为独立人数。客户端自行上报，可能漏报或被伪造。</p><p>原始事件按事件自身携带的字段筛选，包含安装尝试、重试和首次使用。安装与首次使用的归因由首次成功安装决定；两种计数口径分开计算。</p></details>
+    <p class="page-footer">dbskill.site · Skill 互推记录</p>
+  </main>
+  <script>
+    (() => {
+      const fields = ['referrer', 'source_skill', 'target_skill', 'campaign'];
+      const $ = (id) => document.getElementById(id);
+      const selects = Object.fromEntries(fields.map((key) => [key, $(key)]));
+      const placeholders = Object.fromEntries(fields.map((key) => [key, selects[key].options[0].text]));
+      let requestId = 0, controller, hasData = false;
+      const number = (value) => Number(value || 0).toLocaleString('zh-CN');
+      const date = (value) => {
+        if (!value) return '未记录';
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? '未记录' : d.toLocaleString('zh-CN', { year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
+      };
+      function choices(options) {
+        fields.forEach((key) => {
+          const selected = selects[key].value;
+          const values = [...new Set([...(options[key] || []), ...(selected ? [selected] : [])])].sort();
+          selects[key].replaceChildren(new Option(placeholders[key], ''));
+          values.forEach((value) => selects[key].add(new Option(value, value)));
+          selects[key].value = selected;
         });
-    </script>
-  </body>
+      }
+      function empty(title, description) {
+        const row = document.createElement('tr'); row.className = 'empty';
+        const cell = document.createElement('td'); cell.colSpan = 7;
+        const heading = document.createElement('span'); heading.className = 'empty-title'; heading.textContent = title;
+        const text = document.createElement('span'); text.className = 'empty-description'; text.textContent = description;
+        cell.append(heading, text); row.append(cell); $('rows').replaceChildren(row);
+      }
+      function renderRows(rows, filtered) {
+        if (!rows.length) {
+          empty(filtered ? '没有符合筛选条件的安装记录' : '还没有成功安装记录', filtered ? '调整筛选条件，或清除筛选查看全部来源。' : '收到成功安装上报后，会在这里显示推荐来源、目标 Skill 和活动。');
+          return;
+        }
+        const labels = ['推荐人 / 渠道', '来源 Skill', '目标 Skill', '活动', '安装环境', '首次使用', '最近上报'];
+        const classes = ['person', 'skill', 'skill target', 'subtle', 'number', 'number', 'time'];
+        const fragment = document.createDocumentFragment();
+        rows.forEach((row) => {
+          const tr = document.createElement('tr');
+          const display = (value) => !value || value === '(none)' ? '未记录' : value;
+          const values = [display(row.referrer), display(row.source_skill), display(row.target_skill), display(row.campaign), number(row.environments), number(row.first_use_environments), date(row.last_seen)];
+          values.forEach((value, i) => {
+            const td = document.createElement('td'); td.dataset.label = labels[i]; td.className = classes[i]; td.textContent = value; tr.append(td);
+          });
+          fragment.append(tr);
+        });
+        $('rows').replaceChildren(fragment);
+      }
+      async function load() {
+        const id = ++requestId;
+        if (controller) controller.abort();
+        controller = new AbortController();
+        const activeController = controller;
+        const timeout = setTimeout(() => activeController.abort(), 12000);
+        const api = new URL('stats.json', window.location.href);
+        const address = new URL(window.location.href);
+        fields.forEach((key) => {
+          address.searchParams.delete(key);
+          if (selects[key].value) { api.searchParams.set(key, selects[key].value); address.searchParams.set(key, selects[key].value); }
+        });
+        history.replaceState(null, '', address);
+        const filtered = fields.some((key) => selects[key].value);
+        $('scope').textContent = filtered ? '正在更新筛选' : '正在读取全部记录';
+        $('records').setAttribute('aria-busy', 'true'); $('refresh').disabled = true;
+        $('error').hidden = true; $('status').dataset.state = 'loading'; $('status-text').textContent = '更新中';
+        try {
+          const res = await fetch(api, { cache:'no-store', signal:activeController.signal });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const data = await res.json();
+          if (id !== requestId) return;
+          if (!data.totals || !Array.isArray(data.by_referrer)) throw new Error('数据格式无效');
+          choices(data.options || {});
+          const rows = data.by_referrer;
+          $('installs').textContent = number(data.totals.install_environments);
+          $('first-use').textContent = number(data.totals.first_use_environments);
+          $('relations').textContent = number(rows.length);
+          $('row-count').textContent = number(rows.length) + ' 组';
+          $('event-count').textContent = '原始事件 ' + number(data.totals.events) + ' 条';
+          $('updated').textContent = '更新于 ' + date(data.updated_at) + '（本地时间）';
+          renderRows(rows, filtered);
+          $('scope').textContent = filtered ? '已筛选 · 指标同步更新' : '全部来源与目标';
+          hasData = true; $('status').dataset.state = 'ready'; $('status-text').textContent = '数据已更新';
+        } catch (error) {
+          if (id !== requestId) return;
+          $('error').textContent = '暂时无法更新数据。' + (hasData ? '以下保留上次读取的结果；本次筛选尚未生效。' : '请稍后点击“刷新数据”重试。');
+          $('error').hidden = false; $('status').dataset.state = 'error'; $('status-text').textContent = '更新失败';
+          $('scope').textContent = '更新失败 · 请重试';
+          if (!hasData) empty('暂时无法读取记录', '连接恢复后，点击右上方刷新数据。');
+        } finally {
+          clearTimeout(timeout);
+          if (id === requestId) { $('refresh').disabled = false; $('records').setAttribute('aria-busy', 'false'); }
+        }
+      }
+      const initial = new URLSearchParams(location.search);
+      fields.forEach((key) => {
+        const value = initial.get(key);
+        if (value) { selects[key].add(new Option(value, value)); selects[key].value = value; }
+        selects[key].addEventListener('change', load);
+      });
+      $('filters').addEventListener('submit', (event) => event.preventDefault());
+      $('filters').addEventListener('reset', (event) => { event.preventDefault(); fields.forEach((key) => { selects[key].value = ''; }); load(); });
+      $('refresh').addEventListener('click', load);
+      load();
+    })();
+  </script>
+</body>
 </html>
