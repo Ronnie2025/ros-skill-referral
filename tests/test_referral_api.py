@@ -127,6 +127,34 @@ class ReferralApiTests(unittest.TestCase):
         self.assertEqual(stats["totals"]["install_environments"], 1)
         self.assertEqual(stats["totals"]["events"], 1)
 
+    def test_client_uses_python_when_curl_tls_fails(self):
+        ref_file = Path(self.tmp.name) / "referral.json"
+        ref_file.write_text(json.dumps({
+            "referrer": "dontbesilent",
+            "source_skill": "dbs-recommend-ros-clip",
+        }), encoding="utf-8")
+        fake_bin = Path(self.tmp.name) / "bin"
+        fake_bin.mkdir()
+        fake_curl = fake_bin / "curl"
+        fake_curl.write_text("#!/bin/sh\nexit 35\n", encoding="utf-8")
+        fake_curl.chmod(0o755)
+        env = os.environ.copy()
+        env.update({
+            "PATH": str(fake_bin) + os.pathsep + env["PATH"],
+            "ROS_REFERRAL_ENDPOINT": self.url("/referral/e"),
+            "ROS_REFERRAL_FILE": str(ref_file),
+            "ROS_CLIP_CACHE": str(Path(self.tmp.name) / "client-cache"),
+        })
+        script = ROOT / "skills" / "ros-clip-draft" / "scripts" / "report.sh"
+        result = subprocess.run(
+            ["bash", str(script), "setup_success"],
+            env=env, check=True, capture_output=True, text=True,
+        )
+        self.assertIn("reported setup_success", result.stdout)
+        with urllib.request.urlopen(self.url("/referral/stats.json"), timeout=3) as res:
+            stats = json.loads(res.read())
+        self.assertEqual(stats["totals"]["install_environments"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

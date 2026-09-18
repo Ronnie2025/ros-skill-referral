@@ -84,10 +84,14 @@ PAYLOAD=$(printf '{"event":"%s","referrer":"%s","source_skill":"%s","target_skil
 
 send() {
   if command -v curl >/dev/null 2>&1; then
-    curl --fail -sS -m 3 -X POST "$ENDPOINT" \
+    if curl --fail -sS -m 3 -X POST "$ENDPOINT" \
       -H 'content-type: application/json' \
-      --data "$PAYLOAD" >/dev/null
-    return
+      --data "$PAYLOAD" >/dev/null; then
+      return 0
+    else
+      curl_status=$?
+      [[ "$curl_status" -eq 22 ]] && return "$curl_status"
+    fi
   fi
   python3 - "$ENDPOINT" "$PAYLOAD" <<'PY'
 import sys, urllib.request
