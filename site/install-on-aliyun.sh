@@ -48,7 +48,8 @@ python3 "$ROOT/patch_nginx.py" "$DEPLOY_TEMPLATE" "$ROOT/nginx-referral.location
 
 nginx -t
 systemctl daemon-reload
-systemctl enable --now dbskill-referral
+systemctl enable dbskill-referral
+systemctl restart dbskill-referral
 systemctl reload nginx
 
 curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8788/referral/health >/dev/null
