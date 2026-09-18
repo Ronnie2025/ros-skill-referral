@@ -99,7 +99,9 @@ clear_referral_on_failure() {
 trap clear_referral_on_failure ERR
 
 echo "installing $REPO skill $TARGET_SKILL"
-npx -y skills add "$REPO" --skill "$TARGET_SKILL" -g
+# npm's -y and the skills installer's -y handle two different prompts.
+# The caller has already obtained authorization before entering --install.
+npx -y skills add "$REPO" --skill "$TARGET_SKILL" -g -y
 
 installed_dir="$(find_skill "$TARGET_SKILL" || true)"
 if [[ -z "$installed_dir" || ! -f "$installed_dir/SKILL.md" ]]; then

@@ -10,6 +10,13 @@ export TEST_NPX_LOG="$TMP/npx.log"
 mkdir -p "$HOME" "$TMP/bin"
 cat > "$TMP/bin/npx" <<'MOCK'
 #!/usr/bin/env bash
+[[ "$1" == -y && "$2" == skills && "$3" == add ]] || exit 90
+# Without the installer's own yes flag this fixture models an unanswered prompt.
+installer_yes=0
+for arg in "${@:4}"; do
+  [[ "$arg" == -y || "$arg" == --yes ]] && installer_yes=1
+done
+[[ "$installer_yes" -eq 1 ]] || exit 91
 printf '%s\n' called >> "$TEST_NPX_LOG"
 target="$HOME/.agents/skills/test-b"
 mkdir -p "$target/scripts"
@@ -40,4 +47,12 @@ grep -q '"source_skill":"test-a"' "$HOME/.config/skill-referrals/test-b.json"
 grep -q '^already_installed ' "$TMP/again.out"
 [[ ! -e "$HOME/.config/skill-referrals/test-b.json" ]]
 [[ "$(wc -l < "$TEST_NPX_LOG")" -eq 1 ]]
+
+# A fresh opt-out install still proceeds, without invoking the reporting hook.
+mv "$HOME/.agents/skills/test-b" "$TMP/installed-snapshot"
+"$script" --install --no-telemetry > "$TMP/optout.out"
+grep -q '^installed ' "$TMP/optout.out"
+[[ ! -e "$HOME/.config/skill-referrals/test-b.json" ]]
+[[ "$(wc -l < "$TEST_NPX_LOG")" -eq 2 ]]
+[[ "$(wc -l < "$TEST_FIRST_RUN_LOG")" -eq 1 ]]
 echo "named pair checks passed"

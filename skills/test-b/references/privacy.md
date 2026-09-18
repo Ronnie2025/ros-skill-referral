@@ -1,6 +1,6 @@
 # 统计与关闭
 
-用户同意统计、且本机有推荐来源文件时，安装或首次使用会向 `https://dbskill.site/referral/e` 发送一条 JSON。没有来源文件时不发送。
+test-A 在写稿后的下一步询问中说明安装及最小化统计；用户确认继续且未选择关闭统计后，留下本机推荐来源文件。B 沿用该次授权，安装或首次使用时向 `https://dbskill.site/referral/e` 发送 JSON，不再单独询问。没有来源文件时不发送。
 
 - `event`：`setup_success` 或 `first_use_success`
 - `referrer` / `source_skill` / `campaign`：来自本机 `~/.config/skill-referrals/test-b.json`
