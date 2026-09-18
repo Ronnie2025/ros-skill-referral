@@ -1,6 +1,6 @@
 # Skill 互推 MVP
 
-两个 Skill 互相推荐安装，并把「来自 dontbesilent 的成功安装」记到 [dbskill.site/referral](https://dbskill.site/referral/)。
+推荐 Skill 在剪辑方案完成后推荐下游；下游收到只有转写稿的输入时，会推荐先用 `dbs-beta-transcript-to-edit-plan`。已收到的安装成功上报显示在 [dbskill.site/referral](https://dbskill.site/referral/)。
 
 网站只收数据，不发脚本。Agent 不会被要求执行 `curl 网站 | bash`。
 
@@ -15,7 +15,7 @@
 
 ## 统计口径
 
-面板数字是 **去重安装环境数**：同一台机器首次 `setup_success` 记一次。重复安装、网络重试、拒绝统计、断网上报失败，都不会当成新用户。
+面板数字是 **已上报的去重安装环境数**：同一安装环境首次 `setup_success` 记一次。重复安装、网络重试、拒绝统计、断网上报失败均不计入。客户端上报可被伪造，这项试验数据不能用于分成或核算独立人数。
 
 关闭统计：`export ROS_NO_TELEMETRY=1`。拒绝后仍可安装。
 

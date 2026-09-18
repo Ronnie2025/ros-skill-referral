@@ -167,9 +167,12 @@ def stats_payload() -> dict:
         ).fetchall()
         first_use = CONN.execute(
             """
-            SELECT COUNT(DISTINCT installation_id || '|' || target_skill)
-            FROM events
-            WHERE event = 'first_use_success'
+            SELECT COUNT(*) FROM (
+              SELECT installation_id, target_skill FROM events WHERE event = 'first_use_success'
+              INTERSECT
+              SELECT installation_id, target_skill FROM events
+              WHERE event IN ('install_success', 'setup_success')
+            )
             """
         ).fetchone()[0]
     first: dict[tuple[str, str], tuple] = {}
@@ -193,7 +196,7 @@ def stats_payload() -> dict:
     ]
     return {
         "metric": "deduped_install_environments",
-        "note": "通过该推荐入口、允许统计且成功上报的去重安装环境数。一人多台电脑或清除本地标识会算多次。不是独立人数。",
+        "note": "收到的安装成功上报，经安装环境标识去重。一人多台电脑或清除本地标识会算多次；无法据此推算独立人数。数据由客户端自行上报，可能漏报或被伪造。",
         "updated_at": utc_now(),
         "totals": {
             "install_environments": len(first),
@@ -221,8 +224,9 @@ class Handler(BaseHTTPRequestHandler):
         sys_stderr.write("%s - %s\n" % (self.address_string(), fmt % args))
 
     def _ip(self) -> str:
-        forwarded = self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
-        return forwarded or self.client_address[0]
+        if self.client_address[0] in {"127.0.0.1", "::1"}:
+            return self.headers.get("X-Real-IP", "").strip() or self.client_address[0]
+        return self.client_address[0]
 
     def _send(self, status: int, body: bytes, content_type: str, extra: list[tuple[str, str]] | None = None) -> None:
         self.send_response(status)

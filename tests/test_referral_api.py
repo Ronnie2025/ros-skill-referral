@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -38,6 +39,7 @@ class ReferralApiTests(unittest.TestCase):
     def tearDown(self):
         self.server.shutdown()
         self.server.server_close()
+        self.api.CONN.close()
         self.tmp.cleanup()
 
     def url(self, path: str) -> str:
@@ -90,6 +92,7 @@ class ReferralApiTests(unittest.TestCase):
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self.post({"event": "hack", "installation_id": "a", "event_id": "b"})
         self.assertEqual(ctx.exception.code, 400)
+        ctx.exception.close()
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             self.post(
                 {
@@ -99,6 +102,30 @@ class ReferralApiTests(unittest.TestCase):
                 }
             )
         self.assertEqual(ctx.exception.code, 400)
+        ctx.exception.close()
+
+    def test_client_reports_once_and_respects_consent_file(self):
+        ref_file = Path(self.tmp.name) / "referral.json"
+        ref_file.write_text(json.dumps({
+            "referrer": "dontbesilent",
+            "source_skill": "dbs-recommend-ros-clip",
+            "campaign": "test",
+        }), encoding="utf-8")
+        env = os.environ.copy()
+        env.update({
+            "ROS_REFERRAL_ENDPOINT": self.url("/referral/e"),
+            "ROS_REFERRAL_FILE": str(ref_file),
+            "ROS_CLIP_CACHE": str(Path(self.tmp.name) / "client-cache"),
+        })
+        script = ROOT / "skills" / "ros-clip-draft" / "scripts" / "first-run.sh"
+        for _ in range(2):
+            subprocess.run(["bash", str(script)], env=env, check=True, capture_output=True, text=True)
+        ref_file.unlink()
+        subprocess.run(["bash", str(script)], env=env, check=True, capture_output=True, text=True)
+        with urllib.request.urlopen(self.url("/referral/stats.json"), timeout=3) as res:
+            stats = json.loads(res.read())
+        self.assertEqual(stats["totals"]["install_environments"], 1)
+        self.assertEqual(stats["totals"]["events"], 1)
 
 
 if __name__ == "__main__":

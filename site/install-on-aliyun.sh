@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One-time Aliyun install for https://dbskill.site/referral/
 # Run as root on the ECS host. Does not download or execute remote scripts.
-set -euo pipefail
+set -Eeuo pipefail
 
 if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
   echo "Run as root: sudo ./install-on-aliyun.sh" >&2
@@ -24,30 +24,27 @@ install -m 0644 "$ROOT/nginx-referral.location.conf" /etc/nginx/snippets/dbskill
 id www-data >/dev/null 2>&1 || useradd --system --home /var/lib/dbskill-referral --shell /usr/sbin/nologin www-data
 chown -R www-data:www-data /var/lib/dbskill-referral
 
-patch_vhost() {
-  local file="$1"
-  [[ -e "$file" ]] || return 0
-  file="$(readlink -f "$file")"
-  if grep -q 'location ^~ /referral/' "$file"; then
-    return 0
-  fi
-  python3 - "$file" "$ROOT/nginx-referral.location.conf" <<'PY'
-from pathlib import Path
-import sys
-path = Path(sys.argv[1])
-block = Path(sys.argv[2]).read_text(encoding="utf-8").rstrip() + "\n"
-text = path.read_text(encoding="utf-8")
-needle = "    location / {\n"
-if needle in text:
-    text = text.replace(needle, block + "\n" + needle, 1)
-else:
-    text = text.replace("\n}", "\n" + block + "\n}", 1)
-path.write_text(text, encoding="utf-8")
-PY
+LIVE_VHOST=/etc/nginx/sites-available/dbskill.site
+DEPLOY_TEMPLATE=/usr/local/libexec/dbskill/nginx/dbskill.site.conf
+[[ -f "$LIVE_VHOST" && -f "$DEPLOY_TEMPLATE" ]] || {
+  echo "Expected dbskill.site live vhost and deploy template are required" >&2
+  exit 1
 }
 
-patch_vhost /etc/nginx/sites-available/dbskill.site
-patch_vhost /usr/local/libexec/dbskill/nginx/dbskill.site.conf
+BACKUP_ROOT="$(mktemp -d)"
+cp -p "$LIVE_VHOST" "$BACKUP_ROOT/live.conf"
+cp -p "$DEPLOY_TEMPLATE" "$BACKUP_ROOT/template.conf"
+rollback() (
+  set +e
+  cp -p "$BACKUP_ROOT/live.conf" "$LIVE_VHOST"
+  cp -p "$BACKUP_ROOT/template.conf" "$DEPLOY_TEMPLATE"
+  nginx -t && systemctl reload nginx || true
+)
+trap 'rollback; rm -rf "$BACKUP_ROOT"' ERR
+trap 'rm -rf "$BACKUP_ROOT"' EXIT
+
+python3 "$ROOT/patch_nginx.py" "$LIVE_VHOST" "$ROOT/nginx-referral.location.conf"
+python3 "$ROOT/patch_nginx.py" "$DEPLOY_TEMPLATE" "$ROOT/nginx-referral.location.conf"
 
 nginx -t
 systemctl daemon-reload
@@ -55,5 +52,6 @@ systemctl enable --now dbskill-referral
 systemctl reload nginx
 
 curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8788/referral/health >/dev/null
+trap - ERR
 echo "referral api is up on 127.0.0.1:8788"
 echo "public page: https://dbskill.site/referral/"

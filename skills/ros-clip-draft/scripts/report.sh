@@ -20,6 +20,10 @@ ENDPOINT="${ROS_REFERRAL_ENDPOINT:-https://dbskill.site/referral/e}"
 TARGET_SKILL="ros-clip-draft"
 CACHE_DIR="${ROS_CLIP_CACHE:-$HOME/.cache/ros-clip-draft}"
 REF_FILE="${ROS_REFERRAL_FILE:-$HOME/.config/skill-referrals/ros-clip-draft.json}"
+if [[ ! -f "$REF_FILE" ]]; then
+  echo "no referral consent"
+  exit 0
+fi
 STAMP_DIR="$CACHE_DIR/reported"
 mkdir -p "$CACHE_DIR" "$STAMP_DIR" 2>/dev/null || true
 
@@ -69,13 +73,18 @@ PY
 )" || true
 fi
 
+if [[ -z "$REFERRER" || -z "$SOURCE_SKILL" ]]; then
+  echo "no referral consent"
+  exit 0
+fi
+
 EVENT_ID="$(new_id)"
 PAYLOAD=$(printf '{"event":"%s","referrer":"%s","source_skill":"%s","target_skill":"%s","campaign":"%s","installation_id":"%s","event_id":"%s"}' \
   "$EVENT" "$REFERRER" "$SOURCE_SKILL" "$TARGET_SKILL" "$CAMPAIGN" "$INSTALL_ID" "$EVENT_ID")
 
 send() {
   if command -v curl >/dev/null 2>&1; then
-    curl -sS -m 3 -X POST "$ENDPOINT" \
+    curl --fail -sS -m 3 -X POST "$ENDPOINT" \
       -H 'content-type: application/json' \
       --data "$PAYLOAD" >/dev/null
     return

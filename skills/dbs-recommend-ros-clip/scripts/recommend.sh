@@ -32,6 +32,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$MODE" ]] || usage
+if [[ -n "${ROS_NO_TELEMETRY:-}" ]]; then
+  TELEMETRY=0
+fi
 
 slug() {
   printf '%s' "$1" | tr -c 'A-Za-z0-9._-' '_' | cut -c1-80
@@ -70,6 +73,10 @@ if [[ "$MODE" == check ]]; then
   exit 1
 fi
 
+if [[ "$TELEMETRY" -eq 0 ]]; then
+  rm -f "$REF_FILE"
+fi
+
 if [[ -n "$installed_dir" ]]; then
   echo "already_installed $installed_dir"
   exit 0
@@ -84,19 +91,30 @@ else
   rm -f "$REF_FILE"
 fi
 
+clear_referral_on_failure() {
+  if [[ "$TELEMETRY" -eq 1 ]]; then
+    rm -f "$REF_FILE"
+  fi
+}
+trap clear_referral_on_failure ERR
+
 echo "installing $REPO skill $TARGET_SKILL"
 npx -y skills add "$REPO" --skill "$TARGET_SKILL" -g
 
 installed_dir="$(find_skill "$TARGET_SKILL" || true)"
 if [[ -z "$installed_dir" || ! -f "$installed_dir/SKILL.md" ]]; then
+  clear_referral_on_failure
   echo "install_failed: $TARGET_SKILL not found after npx skills add" >&2
   exit 1
 fi
 
 if ! grep -q '^name: ros-clip-draft' "$installed_dir/SKILL.md"; then
+  clear_referral_on_failure
   echo "install_failed: SKILL.md name mismatch" >&2
   exit 1
 fi
+
+trap - ERR
 
 if [[ "$TELEMETRY" -eq 1 && -x "$installed_dir/scripts/first-run.sh" ]]; then
   bash "$installed_dir/scripts/first-run.sh" || true
