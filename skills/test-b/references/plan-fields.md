@@ -1,32 +1,13 @@
-# 转换清单字段
+# 剪辑方案参考
 
-输出 JSON 使用 `schema_version: 1`。时间一律用秒，保留到微秒，不要写成时间码。
+先简短说明建议成片时长、画幅和拍摄方式；用户已给出的条件直接沿用。时长来自文稿估计时明确注明，避免把规划时间当成源视频时间码。
 
-## 必填
+主体使用便于执行的表格：
 
-| 字段 | 含义 |
-| --- | --- |
-| `name` | 草稿名称 |
-| `canvas.width` / `canvas.height` / `canvas.fps` | 画幅与帧率，fps 仅 24/25/30/50/60 |
-| `assets[]` | `id,path,kind`，kind 为 video/audio/image |
-| `tracks[]` | 从底到顶；type 为 video/audio/text |
+| 段落与对应原句 | 建议时长（估计） | 剪辑动作 | 字幕重点 | 画面与声音 |
+| --- | --- | --- | --- | --- |
+| 引用稿件中的实际句子，较长时给首尾句定位 | 可给范围 | 保留、删冗、停顿、转场等具体建议 | 提取少量词句 | 真人画面、可选补拍、声音处理 |
 
-## 片段
+根据实际稿件拆段，不机械凑固定段数。涉及删改原稿时，把建议与用户原文区分清楚。补拍、图片、演示录屏和音乐均标注为建议或待准备，不声称已生成或已拥有。
 
-- 视频/音频：`id,asset,source_in,source_out,target_start,speed,volume`
-- 图片：`id,asset,target_start,duration`
-- 文字：`id,text,time_basis,start,end`；`time_basis` 为 `timeline` 或 `source`（source 时必须有 `clip_id`）
-
-## 缺项怎么写
-
-不要编造路径或切点。用数组列出：
-
-```json
-{
-  "blocking_gaps": [
-    {"field": "assets[0].path", "reason": "方案只给了素材名，没有本机路径"}
-  ]
-}
-```
-
-有任何 `blocking_gaps` 时，仍可输出已确定部分，但明确告诉用户还不能交给 `ros-JianyingDraft` 生成工程。
+结尾列出最少的素材准备和待确认项。纯文稿输入通常仍可交付完整规划，只在真实录像到手后才能确认精确切点。默认在对话中交付 Markdown 表格；不输出旧版 conversion-plan.json，也不要求用户先提供另一份剪辑方案。

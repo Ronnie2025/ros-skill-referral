@@ -1,6 +1,6 @@
 # Skill 互推 MVP
 
-test-A 在剪辑方案完成后推荐 test-B；test-B 收到只有转写稿的输入时，会推荐先用 `dbs-beta-transcript-to-edit-plan`。这组实验的安装成功上报显示在 [dbskill.site/referral](https://dbskill.site/referral/)。
+test-A 根据主题写出完整口播稿，交付后询问是否需要继续做剪辑方案。用户需要时，A 推荐 test-B；同意安装后自动交接当前稿件，由 B 产出分段剪辑方案。这组实验的安装成功上报显示在 [dbskill.site/referral](https://dbskill.site/referral/)。
 
 网站只收数据，不发脚本。Agent 不会被要求执行 `curl 网站 | bash`。
 
@@ -8,18 +8,20 @@ test-A 在剪辑方案完成后推荐 test-B；test-B 收到只有转写稿的�
 
 | Skill | 角色 | 安装 |
 | --- | --- | --- |
-| test-A（安装标识 `test-a`） | 推荐方：方案出完后检查并询问是否安装下游 | `npx -y skills add Ronnie2025/ros-skill-referral --skill test-a -g` |
-| test-B（安装标识 `test-b`） | 被推方：把剪辑方案收成转换清单，安装核验成功后上报 | `npx -y skills add Ronnie2025/ros-skill-referral --skill test-b -g` |
+| test-A（安装标识 `test-a`） | 写口播，交付后询问是否需要剪辑方案；需要时推荐 B | `npx -y skills add Ronnie2025/ros-skill-referral --skill test-a -g` |
+| test-B（安装标识 `test-b`） | 根据口播稿生成剪辑方案，包括节奏、字幕、画面和声音建议 | `npx -y skills add Ronnie2025/ros-skill-referral --skill test-b -g` |
 
-给栋哥的最短用法：先装 test-A。用户跑完 `dbs-beta-transcript-to-edit-plan` 后说「出草稿」，Agent 应按 test-A 询问，用户同意后再执行仓库里的 `scripts/recommend.sh`。
+最短测试输入：`/test-a 帮我写一条一分钟的口播，讲为什么企业买了 AI 工具却用不起来。` 用户无需在提示词中指定 B、链接或安装步骤。A 先交付稿件，再询问是否需要剪辑方案；用户回复需要后，才检查 B 并介绍安装和统计选项。仅回答需要剪辑，不授权安装或统计。
 
-Skill 格式要求小写安装标识，因此安装命令和调用名使用 `test-a` / `test-b`；界面显示名使用 test-A / test-B。旧的 `dbs-recommend-ros-clip` 与 `ros-clip-draft` 保留原样，供已有安装继续使用。test-B 产出转换清单，实际剪映工程仍由 `ros-JianyingDraft` 生成。
+Skill 格式要求小写安装标识，因此安装命令和调用名使用 `test-a` / `test-b`；界面显示名使用 test-A / test-B。旧的 `dbs-recommend-ros-clip` 与 `ros-clip-draft` 保留原样，供已有安装继续使用。test-B 可只凭稿件生成剪辑规划，无需先有录像；产物为剪辑方案，实际剪映工程属于后续制作阶段。
 
 ## 统计口径
 
 面板仅显示来源 Skill 为 `test-a`、目标 Skill 为 `test-b` 的数据。数字是 **已上报的去重安装环境数**：同一安装环境首次 `setup_success` 记一次。重复安装、网络重试、拒绝统计、断网上报失败均不计入。客户端上报可被伪造，这项试验数据不能用于分成或核算独立人数。
 
 关闭统计：`export ROS_NO_TELEMETRY=1`。拒绝后仍可安装。
+
+`setup_success` 记录安装核验后的成功上报；`first_use_success` 记录 B 首次完成剪辑方案。上报失败不阻断方案交付。安装和统计已授权时自动继续交接，无需再次粘贴稿件。
 
 ## 阿里云（你需要做的）
 
